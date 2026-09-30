@@ -1,0 +1,16 @@
+[Unit]
+Description=PPR System - планово-предупредительный ремонт
+After=network.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_USER@
+WorkingDirectory=@APP_DIR@
+Environment=PPR_DB=@APP_DIR@/ppr.db
+ExecStart=@APP_DIR@/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port @PORT@
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
