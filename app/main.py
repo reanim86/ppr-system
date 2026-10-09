@@ -31,10 +31,10 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 app = FastAPI(title="Система ППР", version="1.0.0")
 init_db()
 
-# Общая часть SQL-запроса: задачи вместе с названием станка.
+# Общая часть SQL-запроса: задачи вместе с названием станка и его моделью.
 # Дальше к ней приклеиваются WHERE/ORDER BY.
 TASK_SELECT = """
-SELECT t.*, m.name AS machine_name
+SELECT t.*, m.name AS machine_name, m.model AS machine_model
 FROM tasks t
 JOIN machines m ON m.id = t.machine_id
 """
@@ -278,6 +278,16 @@ def task_logs(tid: int, user=Depends(current_user)):
     return query("SELECT * FROM worklogs WHERE task_id = ? ORDER BY done_date DESC, id DESC", (tid,))
 
 
+@app.get("/api/logs")
+def all_logs(user=Depends(current_user)):
+    """История выполнения по всем работам сразу (для режима «вся история»)."""
+    return query(
+        "SELECT w.*, t.title AS task_title, m.name AS machine_name "
+        "FROM worklogs w JOIN tasks t ON t.id = w.task_id JOIN machines m ON m.id = t.machine_id "
+        "ORDER BY w.done_date DESC, w.id DESC"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Статистика и экспорт
 # ---------------------------------------------------------------------------
@@ -383,14 +393,14 @@ def export_excel(user=Depends(current_user)):
 
     # Лист 3. График ППР
     ws = wb.create_sheet("График ППР")
-    style_sheet(ws, ["Станок", "Работа", "Описание", "Периодичность, дн.",
+    style_sheet(ws, ["Станок", "Модель", "Работа", "Описание", "Периодичность, дн.",
                      "Следующий срок", "Статус", "Последнее выполнение",
                      "Последний результат", "Кто выполнил"],
-                (32, 26, 36, 16, 14, 14, 14, 18, 16))
+                (32, 16, 26, 36, 16, 14, 14, 14, 18, 16))
     for t in tasks:
         last = last_done.get(t["id"])
         ws.append([
-            t["machine_name"], t["title"], t["description"], t["frequency_days"],
+            t["machine_name"], t["machine_model"], t["title"], t["description"], t["frequency_days"],
             t["due_date"], _status_label(t["due_date"]),
             last["done_date"] if last else "",
             f"{last['percent']}%" if last else "",

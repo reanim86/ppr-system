@@ -9,16 +9,16 @@
 <body>
 
 <div id="login-view">
-  <div class="login-box">
+  <form id="login-form" class="login-box" autocomplete="off" onsubmit="doLogin(); return false;">
     <h1>Система ППР</h1>
     <p class="sub">Планово-предупредительный ремонт — C3Solutions</p>
     <label>Логин</label>
-    <input id="login-user" autocomplete="username" placeholder="Логин">
+    <input id="login-user" name="username" placeholder="Логин" autofocus>
     <label>Пароль</label>
-    <input id="login-pass" type="password" autocomplete="current-password" placeholder="Пароль">
-    <button class="btn wide" onclick="doLogin()">Войти</button>
+    <input id="login-pass" type="password" name="password" placeholder="Пароль">
+    <button type="submit" class="btn wide">Войти</button>
     <div id="login-error" class="error"></div>
-  </div>
+  </form>
 </div>
 
 <div id="app-view" class="hidden">
@@ -75,7 +75,7 @@
     </div>
     <table id="tasks-table">
       <thead><tr>
-        <th>Станок</th><th>Работа</th><th>Периодичность</th><th>Следующий срок</th><th>Статус</th><th class="col-actions">Действия</th>
+        <th>Станок</th><th>Модель</th><th>Работа</th><th>Периодичность</th><th>Следующий срок</th><th>Статус</th><th class="col-actions">Действия</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -85,7 +85,7 @@
     <div class="toolbar">
       <h2>История выполнения</h2>
       <select id="logs-task-select" onchange="renderLogs()">
-        <option value="">— выберите работу —</option>
+        <option value="">— вся история (все работы) —</option>
       </select>
     </div>
     <table id="logs-table">

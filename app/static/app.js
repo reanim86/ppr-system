@@ -125,6 +125,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.classList.add("active");
     document.querySelectorAll(".tab").forEach((t) => t.classList.add("hidden"));
     $("#tab-" + btn.dataset.tab).classList.remove("hidden");
+    if (btn.dataset.tab === "logs") renderLogs();
   });
 });
 
@@ -233,7 +234,7 @@ function renderTasks() {
   const list = filter ? TASKS.filter((t) => t.machine_id === parseInt(filter)) : TASKS;
   const tb = $("#tasks-table tbody");
   if (!list.length) {
-    tb.innerHTML = `<tr><td colspan="6" class="empty">Нет работ. Добавьте первую.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="7" class="empty">Нет работ. Добавьте первую.</td></tr>`;
     return;
   }
   tb.innerHTML = list.map((t) => {
@@ -241,6 +242,7 @@ function renderTasks() {
     return `
     <tr>
       <td>${esc(t.machine_name)}</td>
+      <td>${esc(t.machine_model)}</td>
       <td><b>${esc(t.title)}</b><br><span class="muted">${esc(t.description)}</span></td>
       <td>${t.frequency_days} дн.</td>
       <td>${fmtDate(t.due_date)}</td>
@@ -465,19 +467,37 @@ async function openLogs(id) {
 
 async function renderLogs() {
   const id = $("#logs-task-select").value;
+  const thead = $("#logs-table thead");
   const tb = $("#logs-table tbody");
-  if (!id) { tb.innerHTML = `<tr><td colspan="4" class="empty">Выберите работу</td></tr>`; return; }
   try {
-    const logs = await api(`/tasks/${id}/logs`);
-    if (!logs.length) { tb.innerHTML = `<tr><td colspan="4" class="empty">Выполнений пока нет</td></tr>`; return; }
-    tb.innerHTML = logs.map((l) => `
-      <tr>
-        <td>${fmtDate(l.done_date)}</td>
-        <td>${esc(l.user)}</td>
-        <td><span class="status-badge ${l.percent >= 100 ? "status-ok" : "status-today"}">${l.percent}%</span></td>
-        <td>${esc(l.comment)}</td>
-      </tr>`).join("");
-  } catch (e) { tb.innerHTML = `<tr><td colspan="4" class="empty">Ошибка: ${esc(e.message)}</td></tr>`; }
+    if (!id) {
+      const logs = await api("/logs");
+      thead.innerHTML = `<tr><th>Дата</th><th>Станок</th><th>Работа</th><th>Кто</th><th>Выполнение</th><th>Комментарий</th></tr>`;
+      if (!logs.length) { tb.innerHTML = `<tr><td colspan="6" class="empty">Выполнений пока нет</td></tr>`; return; }
+      tb.innerHTML = logs.map((l) => `
+        <tr>
+          <td>${fmtDate(l.done_date)}</td>
+          <td>${esc(l.machine_name)}</td>
+          <td>${esc(l.task_title)}</td>
+          <td>${esc(l.user)}</td>
+          <td><span class="status-badge ${l.percent >= 100 ? "status-ok" : "status-today"}">${l.percent}%</span></td>
+          <td>${esc(l.comment)}</td>
+        </tr>`).join("");
+    } else {
+      const logs = await api(`/tasks/${id}/logs`);
+      thead.innerHTML = `<tr><th>Дата</th><th>Кто</th><th>Выполнение</th><th>Комментарий</th></tr>`;
+      if (!logs.length) { tb.innerHTML = `<tr><td colspan="4" class="empty">Выполнений пока нет</td></tr>`; return; }
+      tb.innerHTML = logs.map((l) => `
+        <tr>
+          <td>${fmtDate(l.done_date)}</td>
+          <td>${esc(l.user)}</td>
+          <td><span class="status-badge ${l.percent >= 100 ? "status-ok" : "status-today"}">${l.percent}%</span></td>
+          <td>${esc(l.comment)}</td>
+        </tr>`).join("");
+    }
+  } catch (e) {
+    tb.innerHTML = `<tr><td colspan="6" class="empty">Ошибка: ${esc(e.message)}</td></tr>`;
+  }
 }
 
 /* ---------------- Modal ---------------- */

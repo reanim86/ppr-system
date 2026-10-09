@@ -7,12 +7,15 @@ body {
   color: #1c2733;
 }
 
-.hidden { display: none; }
+.hidden { display: none !important; }
 
 /* ---------- Login ---------- */
 #login-view {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: linear-gradient(135deg, #1c3a5a 0%, #2a5a8f 100%);
   display: flex;
   align-items: center;
@@ -171,7 +174,10 @@ tr:hover td { background: #f6f8fb; }
 /* ---------- Modal ---------- */
 #modal-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: rgba(20, 30, 45, .45);
   display: flex;
   align-items: center;
