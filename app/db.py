@@ -62,11 +62,13 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL DEFAULT 'engineer'
 );
 
--- Станки (оборудование), по которым ведётся график ППР.
+-- Оборудование (станки), по которым ведётся график ППР.
+-- power — мощность (текстом, например «7,5 кВт»).
 CREATE TABLE IF NOT EXISTS machines (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     model TEXT NOT NULL DEFAULT '',
+    power TEXT NOT NULL DEFAULT '',
     location TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT ''
 );
@@ -74,6 +76,7 @@ CREATE TABLE IF NOT EXISTS machines (
 -- Работы по графику ППР.
 -- machine_id    — станок, к которому относится работа;
 -- frequency_days — периодичность в днях (30 = ежемесячно, 90 = ежеквартально);
+-- planned_hours — плановое время выполнения работы, в часах (0 = не задано);
 -- due_date      — дата следующего выполнения; после отметки 100%
 --                 сдвигается на frequency_days вперёд.
 CREATE TABLE IF NOT EXISTS tasks (
@@ -82,6 +85,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     frequency_days INTEGER NOT NULL DEFAULT 30,
+    planned_hours REAL NOT NULL DEFAULT 0,
     due_date TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
@@ -127,6 +131,16 @@ def init_db():
         if "user" not in cols:
             conn.execute("ALTER TABLE worklogs ADD COLUMN user TEXT NOT NULL DEFAULT ''")
 
+        # Миграция для старых баз: колонка planned_hours (плановое время, часы)
+        tcols = [r["name"] for r in conn.execute("PRAGMA table_info(tasks)")]
+        if "planned_hours" not in tcols:
+            conn.execute("ALTER TABLE tasks ADD COLUMN planned_hours REAL NOT NULL DEFAULT 0")
+
+        # Миграция для старых баз: колонка power (мощность оборудования)
+        mcols = [r["name"] for r in conn.execute("PRAGMA table_info(machines)")]
+        if "power" not in mcols:
+            conn.execute("ALTER TABLE machines ADD COLUMN power TEXT NOT NULL DEFAULT ''")
+
         # Учётные записи по умолчанию (только при самом первом запуске)
         cur = conn.execute("SELECT COUNT(*) AS n FROM users")
         if cur.fetchone()["n"] == 0:
@@ -152,7 +166,7 @@ def _seed_sample(conn):
     """
     Наполняет БД демо-данными: два станка и по несколько типовых работ.
     Создано, чтобы после установки сразу было видно, как работает система.
-    Удалить можно из веб-интерфейса (вкладки «Станки» и «График ППР»).
+    Удалить можно из веб-интерфейса (вкладки «Оборудование» и «График ППР»).
     """
     today = date.today().isoformat()
 

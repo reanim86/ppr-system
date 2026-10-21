@@ -3,8 +3,8 @@
 body {
   font-family: "Segoe UI", Arial, sans-serif;
   margin: 0;
-  background: #f2f4f7;
-  color: #1c2733;
+  background: #f2f2f2;
+  color: #414042;
 }
 
 .hidden { display: none !important; }
@@ -16,7 +16,7 @@ body {
   right: 0;
   bottom: 0;
   left: 0;
-  background: linear-gradient(135deg, #1c3a5a 0%, #2a5a8f 100%);
+  background: linear-gradient(135deg, #414042 0%, #47C2C7 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -28,7 +28,7 @@ body {
   width: 360px;
   box-shadow: 0 8px 24px rgba(0,0,0,.25);
 }
-.login-box h1 { margin: 0 0 4px; font-size: 22px; color: #1c3a5a; }
+.login-box h1 { margin: 0 0 4px; font-size: 22px; color: #414042; }
 .login-box .sub { margin: 0 0 20px; color: #6b7686; font-size: 13px; }
 .login-box label { display: block; font-size: 13px; margin: 8px 0 4px; color: #44506b; }
 .login-box input {
@@ -42,9 +42,10 @@ body {
 
 /* ---------- Layout ---------- */
 header {
-  background: #1c3a5a;
+  background: #414042;
   color: #fff;
   padding: 10px 20px;
+  border-bottom: 3px solid #47C2C7;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -82,26 +83,27 @@ nav {
   font-size: 14px;
   border-radius: 8px;
   cursor: pointer;
-  color: #44506b;
+  color: #414042;
 }
-.tab-btn:hover { background: #e0e6ee; }
-.tab-btn.active { background: #1c3a5a; color: #fff; }
+.tab-btn:hover { background: #e2f4f5; }
+.tab-btn.active { background: #47C2C7; color: #2b2b2d; }
 
 .tab { padding: 20px; }
-.tab h2 { margin: 6px 0 14px; font-size: 17px; color: #1c3a5a; }
+.tab h2 { margin: 6px 0 14px; font-size: 17px; color: #414042; border-left: 5px solid #47C2C7; padding-left: 10px; }
 .toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 
 /* ---------- Buttons ---------- */
 .btn {
-  background: #1c3a5a;
-  color: #fff;
+  background: #47C2C7;
+  color: #2b2b2d;
   border: none;
   border-radius: 8px;
   padding: 9px 16px;
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
 }
-.btn:hover { background: #27486f; }
+.btn:hover { background: #3aa8ad; }
 .btn.wide { width: 100%; }
 .btn.green { background: #27a35f; }
 .btn.green:hover { background: #2fb96c; }
@@ -112,9 +114,18 @@ nav {
   padding: 6px 12px;
   font-size: 13px;
   cursor: pointer;
-  color: #44506b;
+  color: #414042;
 }
-.ghost:hover { background: #e3e9f1; }
+.ghost:hover { background: #e2f4f5; }
+header .ghost {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, .5);
+}
+header .ghost:hover {
+  background: rgba(255, 255, 255, .18);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, .8);
+}
 .danger {
   background: transparent;
   border: 1px solid #c0392b;
@@ -135,7 +146,7 @@ nav {
   padding: 14px;
   text-align: center;
 }
-.card-num { font-size: 26px; font-weight: 700; color: #1c3a5a; }
+.card-num { font-size: 26px; font-weight: 700; color: #3aa8ad; }
 .card-label { font-size: 13px; color: #6b7686; margin-top: 4px; }
 
 /* ---------- Tables ---------- */
@@ -147,11 +158,11 @@ table {
   overflow: hidden;
 }
 th {
-  background: #e8edf3;
+  background: #414042;
   text-align: left;
   padding: 10px 12px;
   font-size: 13px;
-  color: #44506b;
+  color: #ffffff;
 }
 td { padding: 9px 12px; border-bottom: 1px solid #e3e8ef; font-size: 14px; }
 tr:hover td { background: #f6f8fb; }
@@ -203,7 +214,7 @@ tr:hover td { background: #f6f8fb; }
   color: #8a93a1;
   cursor: pointer;
 }
-#modal h3 { margin: 4px 0 14px; font-size: 16px; color: #1c3a5a; }
+#modal h3 { margin: 4px 0 14px; font-size: 16px; color: #414042; }
 #modal label { display: block; font-size: 13px; margin: 10px 0 4px; color: #44506b; }
 #modal input, #modal select, #modal textarea {
   width: 100%;
@@ -220,6 +231,11 @@ select, input[type="date"], input[type="number"] {
   border-radius: 8px;
   padding: 7px;
   font-size: 14px;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #47C2C7;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(71, 194, 199, .35);
 }
 
 @media (max-width: 760px) {

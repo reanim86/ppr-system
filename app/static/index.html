@@ -26,6 +26,7 @@
     <div class="brand">Система ППР — C3Solutions</div>
     <div class="user-info">
       <button class="btn" onclick="exportExcel()">Экспорт в Excel</button>
+      <button class="btn" onclick="exportYear()">Годовой план</button>
       <span id="whoami"></span>
       <button class="ghost" onclick="changePass()">Сменить пароль</button>
       <button class="ghost" onclick="logout()">Выйти</button>
@@ -36,7 +37,7 @@
 
   <nav>
     <button class="tab-btn active" data-tab="dashboard">Сегодня</button>
-    <button class="tab-btn" data-tab="machines">Станки</button>
+    <button class="tab-btn" data-tab="machines">Оборудование</button>
     <button class="tab-btn" data-tab="tasks">График ППР</button>
     <button class="tab-btn" data-tab="logs">История</button>
   </nav>
@@ -46,7 +47,7 @@
       <div class="card"><div class="card-num" id="stat-overdue">0</div><div class="card-label">просрочено</div></div>
       <div class="card"><div class="card-num" id="stat-today">0</div><div class="card-label">сегодня</div></div>
       <div class="card"><div class="card-num" id="stat-tasks">0</div><div class="card-label">всего работ</div></div>
-      <div class="card"><div class="card-num" id="stat-machines">0</div><div class="card-label">станков</div></div>
+      <div class="card"><div class="card-num" id="stat-machines">0</div><div class="card-label">оборудования</div></div>
     </div>
     <h2>Просрочено / на сегодня</h2>
     <div id="due-list"></div>
@@ -56,11 +57,11 @@
 
   <section id="tab-machines" class="tab">
     <div class="toolbar">
-      <h2>Станки</h2>
-      <button class="btn" id="add-machine-btn" onclick="machineForm()">+ Добавить станок</button>
+      <h2>Оборудование</h2>
+      <button class="btn" id="add-machine-btn" onclick="machineForm()">+ Добавить оборудование</button>
     </div>
     <table id="machines-table">
-      <thead><tr><th>Название</th><th>Модель</th><th>Расположение</th><th>Примечания</th><th class="col-actions"></th></tr></thead>
+      <thead><tr><th>Название</th><th>Модель</th><th>Мощность</th><th>Расположение</th><th>Примечания</th><th class="col-actions"></th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
@@ -69,13 +70,13 @@
     <div class="toolbar">
       <h2>График ППР</h2>
       <select id="tasks-filter" onchange="renderTasks()">
-        <option value="">Все станки</option>
+        <option value="">Все оборудование</option>
       </select>
       <button class="btn" id="add-task-btn" onclick="taskForm()">+ Добавить работу</button>
     </div>
     <table id="tasks-table">
       <thead><tr>
-        <th>Станок</th><th>Модель</th><th>Работа</th><th>Периодичность</th><th>Следующий срок</th><th>Статус</th><th class="col-actions">Действия</th>
+        <th>Оборудование</th><th>Модель</th><th>Работа</th><th>Периодичность</th><th>План, ч</th><th>Следующий срок</th><th>Статус</th><th class="col-actions">Действия</th>
       </tr></thead>
       <tbody></tbody>
     </table>

@@ -106,6 +106,34 @@ async function exportExcel() {
   }
 }
 
+async function exportYear() {
+  const def = String(new Date().getFullYear());
+  const y = prompt("Год для выгрузки годового плана ППР:", def);
+  if (!y) return;
+  if (!/^\d{4}$/.test(y.trim())) { alert("Введите год четырьмя цифрами, например 2026"); return; }
+  const year = y.trim();
+  try {
+    const res = await fetch(API + "/export_year.xlsx?year=" + year, {
+      headers: { Authorization: "Bearer " + TOKEN },
+    });
+    if (!res.ok) {
+      let detail = `Ошибка ${res.status}`;
+      try { const j = await res.json(); if (j.detail) detail = j.detail; } catch (e) {}
+      alert(detail);
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Годовой_план_ППР_" + year + ".xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("Ошибка выгрузки: " + e.message);
+  }
+}
+
 function enterApp() {
   $("#login-view").classList.add("hidden");
   $("#app-view").classList.remove("hidden");
@@ -159,13 +187,14 @@ function renderCards(st) {
 function renderMachines() {
   const tb = $("#machines-table tbody");
   if (!MACHINES.length) {
-    tb.innerHTML = `<tr><td colspan="5" class="empty">Нет станков. Добавьте первый станок.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="6" class="empty">Нет оборудования. Добавьте первое.</td></tr>`;
     return;
   }
   tb.innerHTML = MACHINES.map((m) => `
     <tr>
       <td>${esc(m.name)}</td>
       <td>${esc(m.model)}</td>
+      <td>${esc(m.power)}</td>
       <td>${esc(m.location)}</td>
       <td>${esc(m.notes)}</td>
       <td class="col-actions">
@@ -179,11 +208,13 @@ function renderMachines() {
 function machineForm(id = null) {
   const m = id ? MACHINES.find((x) => x.id === id) : null;
   openModal(`
-    <h3>${m ? "Изменить станок" : "Добавить станок"}</h3>
+    <h3>${m ? "Изменить оборудование" : "Добавить оборудование"}</h3>
     <label>Название *</label>
     <input id="f-name" value="${esc(m?.name)}">
     <label>Модель</label>
     <input id="f-model" value="${esc(m?.model)}">
+    <label>Мощность</label>
+    <input id="f-power" value="${esc(m?.power)}" placeholder="например, 7,5 кВт">
     <label>Расположение / цех</label>
     <input id="f-loc" value="${esc(m?.location)}">
     <label>Примечания</label>
@@ -198,6 +229,7 @@ async function saveMachine(id) {
   const body = {
     name: $("#f-name").value.trim(),
     model: $("#f-model").value.trim(),
+    power: $("#f-power").value.trim(),
     location: $("#f-loc").value.trim(),
     notes: $("#f-notes").value.trim(),
   };
@@ -211,7 +243,7 @@ async function saveMachine(id) {
 }
 
 async function deleteMachine(id) {
-  if (!confirm("Удалить станок вместе со всеми работами по нему?")) return;
+  if (!confirm("Удалить оборудование вместе со всеми работами по нему?")) return;
   try { await api(`/machines/${id}`, "DELETE"); await loadAll(); }
   catch (e) { alert(e.message); }
 }
@@ -234,7 +266,7 @@ function renderTasks() {
   const list = filter ? TASKS.filter((t) => t.machine_id === parseInt(filter)) : TASKS;
   const tb = $("#tasks-table tbody");
   if (!list.length) {
-    tb.innerHTML = `<tr><td colspan="7" class="empty">Нет работ. Добавьте первую.</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="8" class="empty">Нет работ. Добавьте первую.</td></tr>`;
     return;
   }
   tb.innerHTML = list.map((t) => {
@@ -245,6 +277,7 @@ function renderTasks() {
       <td>${esc(t.machine_model)}</td>
       <td><b>${esc(t.title)}</b><br><span class="muted">${esc(t.description)}</span></td>
       <td>${t.frequency_days} дн.</td>
+      <td>${t.planned_hours ? t.planned_hours + " ч" : "—"}</td>
       <td>${fmtDate(t.due_date)}</td>
       <td><span class="status-badge ${cls}">${label}</span></td>
       <td class="col-actions">
@@ -262,10 +295,10 @@ function taskForm(id = null) {
   const t = id ? TASKS.find((x) => x.id === id) : null;
   const opts = MACHINES.map((m) =>
     `<option value="${m.id}" ${t && t.machine_id === m.id ? "selected" : ""}>${esc(m.name)}</option>`).join("");
-  if (!MACHINES.length) { alert("Сначала добавьте станок"); return; }
+  if (!MACHINES.length) { alert("Сначала добавьте оборудование"); return; }
   openModal(`
     <h3>${t ? "Изменить работу" : "Добавить работу"}</h3>
-    <label>Станок *</label>
+    <label>Оборудование *</label>
     <select id="f-mid">${opts}</select>
     <label>Название работы *</label>
     <input id="f-title" value="${esc(t?.title)}">
@@ -273,6 +306,8 @@ function taskForm(id = null) {
     <textarea id="f-desc" rows="2">${esc(t?.description)}</textarea>
     <label>Периодичность (дней между выполнениями)</label>
     <input id="f-freq" type="number" min="1" max="3650" value="${t?.frequency_days ?? 30}">
+    <label>Плановое время выполнения (часов)</label>
+    <input id="f-hours" type="number" min="0" max="10000" step="0.5" value="${t && t.planned_hours ? t.planned_hours : ""}" placeholder="например, 2">
     <label>Дата следующего выполнения *</label>
     <input id="f-due" type="date" value="${t?.due_date ?? todayIso()}">
     <div class="modal-actions">
@@ -287,6 +322,7 @@ async function saveTask(id) {
     title: $("#f-title").value.trim(),
     description: $("#f-desc").value.trim(),
     frequency_days: parseInt($("#f-freq").value || "30"),
+    planned_hours: parseFloat($("#f-hours").value || "0"),
     due_date: $("#f-due").value,
   };
   if (!body.title) { alert("Укажите название работы"); return; }
@@ -366,7 +402,7 @@ function beep() {
 function renderTaskRows(tasks) {
   if (!tasks.length) return `<div class="empty">Нет работ.</div>`;
   return `<table><thead><tr>
-    <th>Станок</th><th>Работа</th><th>Срок</th><th class="col-actions"></th>
+    <th>Оборудование</th><th>Работа</th><th>Срок</th><th class="col-actions"></th>
   </tr></thead><tbody>` + tasks.map((t) => `
     <tr>
       <td>${esc(t.machine_name)}</td>
@@ -445,7 +481,7 @@ function startPolling() {
 function renderTaskSelects() {
   const filter = $("#tasks-filter");
   const cur = filter.value;
-  filter.innerHTML = `<option value="">Все станки</option>` +
+  filter.innerHTML = `<option value="">Все оборудование</option>` +
     MACHINES.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("");
   filter.value = cur;
 
@@ -472,7 +508,7 @@ async function renderLogs() {
   try {
     if (!id) {
       const logs = await api("/logs");
-      thead.innerHTML = `<tr><th>Дата</th><th>Станок</th><th>Работа</th><th>Кто</th><th>Выполнение</th><th>Комментарий</th></tr>`;
+      thead.innerHTML = `<tr><th>Дата</th><th>Оборудование</th><th>Работа</th><th>Кто</th><th>Выполнение</th><th>Комментарий</th></tr>`;
       if (!logs.length) { tb.innerHTML = `<tr><td colspan="6" class="empty">Выполнений пока нет</td></tr>`; return; }
       tb.innerHTML = logs.map((l) => `
         <tr>

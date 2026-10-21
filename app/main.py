@@ -83,19 +83,21 @@ class PasswordData(BaseModel):
 
 
 class MachineIn(BaseModel):
-    """Станок: название, модель, расположение, примечания."""
+    """Оборудование: название, модель, мощность, расположение, примечания."""
     name: str
     model: str = ""
+    power: str = ""
     location: str = ""
     notes: str = ""
 
 
 class TaskIn(BaseModel):
-    """Работа по графику: станок, название, описание, периодичность, дата."""
+    """Работа по графику: станок, название, описание, периодичность, плановое время, дата."""
     machine_id: int
     title: str
     description: str = ""
     frequency_days: int = Field(30, ge=1, le=3650)
+    planned_hours: float = Field(0, ge=0, le=10000)
     due_date: str  # формат ГГГГ-ММ-ДД
 
 
@@ -145,10 +147,11 @@ def list_machines(user=Depends(current_user)):
 def create_machine(data: MachineIn, user=Depends(require_write)):
     """Добавление станка (инженер/руководитель)."""
     if not data.name.strip():
-        raise HTTPException(status_code=422, detail="Название станка не может быть пустым")
+        raise HTTPException(status_code=422, detail="Название оборудования не может быть пустым")
     mid = execute(
-        "INSERT INTO machines (name, model, location, notes) VALUES (?, ?, ?, ?)",
-        (data.name.strip(), data.model.strip(), data.location.strip(), data.notes.strip()),
+        "INSERT INTO machines (name, model, power, location, notes) VALUES (?, ?, ?, ?, ?)",
+        (data.name.strip(), data.model.strip(), data.power.strip(),
+         data.location.strip(), data.notes.strip()),
     )
     # Возвращаем созданный объект целиком
     return query("SELECT * FROM machines WHERE id = ?", (mid,), one=True)
@@ -158,10 +161,11 @@ def create_machine(data: MachineIn, user=Depends(require_write)):
 def update_machine(mid: int, data: MachineIn, user=Depends(require_write)):
     """Изменение станка по id."""
     if not data.name.strip():
-        raise HTTPException(status_code=422, detail="Название станка не может быть пустым")
+        raise HTTPException(status_code=422, detail="Название оборудования не может быть пустым")
     execute(
-        "UPDATE machines SET name = ?, model = ?, location = ?, notes = ? WHERE id = ?",
-        (data.name.strip(), data.model.strip(), data.location.strip(), data.notes.strip(), mid),
+        "UPDATE machines SET name = ?, model = ?, power = ?, location = ?, notes = ? WHERE id = ?",
+        (data.name.strip(), data.model.strip(), data.power.strip(),
+         data.location.strip(), data.notes.strip(), mid),
     )
     return query("SELECT * FROM machines WHERE id = ?", (mid,), one=True)
 
@@ -188,12 +192,12 @@ def create_task(data: TaskIn, user=Depends(require_write)):
     _validate_task(data)
     machine = query("SELECT id FROM machines WHERE id = ?", (data.machine_id,), one=True)
     if not machine:
-        raise HTTPException(status_code=404, detail="Станок не найден")
+        raise HTTPException(status_code=404, detail="Оборудование не найдено")
     tid = execute(
-        "INSERT INTO tasks (machine_id, title, description, frequency_days, due_date, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO tasks (machine_id, title, description, frequency_days, planned_hours, due_date, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
         (data.machine_id, data.title.strip(), data.description.strip(),
-         data.frequency_days, data.due_date, date.today().isoformat()),
+         data.frequency_days, data.planned_hours, data.due_date, date.today().isoformat()),
     )
     return query(TASK_SELECT + "WHERE t.id = ?", (tid,), one=True)
 
@@ -206,10 +210,10 @@ def update_task(tid: int, data: TaskIn, user=Depends(require_write)):
     if not task:
         raise HTTPException(status_code=404, detail="Работа не найдена")
     execute(
-        "UPDATE tasks SET machine_id = ?, title = ?, description = ?, frequency_days = ?, due_date = ? "
+        "UPDATE tasks SET machine_id = ?, title = ?, description = ?, frequency_days = ?, planned_hours = ?, due_date = ? "
         "WHERE id = ?",
         (data.machine_id, data.title.strip(), data.description.strip(),
-         data.frequency_days, data.due_date, tid),
+         data.frequency_days, data.planned_hours, data.due_date, tid),
     )
     return query(TASK_SELECT + "WHERE t.id = ?", (tid,), one=True)
 
@@ -322,7 +326,7 @@ def _status_label(due_date: str) -> str:
 def export_excel(user=Depends(current_user)):
     """
     Формирование отчёта в Excel (openpyxl) с четырьмя листами:
-    Сводка, Станки, График ППР, История выполнения.
+    Сводка, Оборудование, График ППР, История выполнения.
 
     Файл собирается в памяти (BytesIO) и отдаётся как вложение
     с именем Отчет_ППР_<дата>.xlsx.
@@ -373,7 +377,7 @@ def export_excel(user=Depends(current_user)):
     ws.title = "Сводка"
     ws.append(["Показатель", "Значение"])
     ws.append(["Дата отчёта", today.strftime("%d.%m.%Y")])
-    ws.append(["Всего станков", len(machines)])
+    ws.append(["Всего оборудования", len(machines)])
     ws.append(["Всего работ в графике", len(tasks)])
     ws.append(["Просрочено", sum(1 for t in tasks if t["due_date"] < today_iso)])
     ws.append(["Срок на сегодня", sum(1 for t in tasks if t["due_date"] == today_iso)])
@@ -384,23 +388,25 @@ def export_excel(user=Depends(current_user)):
     ws.column_dimensions["A"].width = 24
     ws.column_dimensions["B"].width = 28
 
-    # Лист 2. Станки
-    ws = wb.create_sheet("Станки")
-    style_sheet(ws, ["№", "Название", "Модель", "Расположение", "Примечания", "Работ в графике"], (6, 32, 16, 20, 34, 16))
+    # Лист 2. Оборудование
+    ws = wb.create_sheet("Оборудование")
+    style_sheet(ws, ["№", "Название", "Модель", "Мощность", "Расположение", "Примечания", "Работ в графике"],
+                (6, 32, 16, 14, 20, 34, 16))
     for i, m in enumerate(machines, start=1):
         n = sum(1 for t in tasks if t["machine_id"] == m["id"])
-        ws.append([i, m["name"], m["model"], m["location"], m["notes"], n])
+        ws.append([i, m["name"], m["model"], m["power"], m["location"], m["notes"], n])
 
     # Лист 3. График ППР
     ws = wb.create_sheet("График ППР")
-    style_sheet(ws, ["Станок", "Модель", "Работа", "Описание", "Периодичность, дн.",
+    style_sheet(ws, ["Оборудование", "Модель", "Работа", "Описание", "Периодичность, дн.", "План, ч",
                      "Следующий срок", "Статус", "Последнее выполнение",
                      "Последний результат", "Кто выполнил"],
-                (32, 16, 26, 36, 16, 14, 14, 14, 18, 16))
+                (32, 16, 26, 36, 16, 10, 14, 14, 14, 18, 16))
     for t in tasks:
         last = last_done.get(t["id"])
         ws.append([
-            t["machine_name"], t["machine_model"], t["title"], t["description"], t["frequency_days"],
+            t["machine_name"], t["machine_model"], t["title"], t["description"],
+            t["frequency_days"], t["planned_hours"] or "",
             t["due_date"], _status_label(t["due_date"]),
             last["done_date"] if last else "",
             f"{last['percent']}%" if last else "",
@@ -409,7 +415,7 @@ def export_excel(user=Depends(current_user)):
 
     # Лист 4. История выполнения
     ws = wb.create_sheet("История выполнения")
-    style_sheet(ws, ["Дата", "Станок", "Работа", "Кто", "Результат", "Комментарий"],
+    style_sheet(ws, ["Дата", "Оборудование", "Работа", "Кто", "Результат", "Комментарий"],
                 (14, 32, 30, 14, 10, 40))
     for w in logs:
         ws.append([w["done_date"], w["machine_name"], w["task_title"], w["user"],
@@ -428,6 +434,199 @@ def export_excel(user=Depends(current_user)):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
             "Content-Disposition": f"attachment; filename=\"ppr_report_{today_iso}.xlsx\"; "
+                                   f"filename*=UTF-8''{quote(filename)}"
+        },
+    )
+
+
+def _task_occurrences(due_iso: str, freq_days: int, year: int):
+    """
+    Даты выполнения работы в указанном году по графику:
+    от даты ближайшего выполнения шагами по периодичности вперёд/назад.
+    Возвращает список объектов date.
+    """
+    try:
+        due = date.fromisoformat(due_iso)
+    except (ValueError, TypeError):
+        return []
+    if not freq_days or freq_days < 1:
+        return []
+    y0 = date(year, 1, 1)
+    y1 = date(year, 12, 31)
+    # Ближайшее выполнение, попадающее в год (≥ 1 января)
+    if due < y0:
+        under = (y0 - due).days
+        k = (under + freq_days - 1) // freq_days
+        due = due + timedelta(days=k * freq_days)
+    else:
+        steps = (due - y0).days // freq_days
+        due = due - timedelta(days=steps * freq_days)
+    occ = []
+    cur = due
+    while cur <= y1:
+        if cur >= y0:
+            occ.append(cur)
+        cur = cur + timedelta(days=freq_days)
+    return occ
+
+
+@app.get("/api/export_year.xlsx")
+def export_year(year: int = 0, user=Depends(current_user)):
+    """
+    Годовой план ППР. Два листа:
+
+    - «Год»: оборудование (сгруппировано по расположению) x 12 месяцев
+      (метка «Х», если в этом месяце есть ремонт) + «Трудоемкость» = сумма
+      плановых часов за год;
+    - «Год по дням»: оборудование (сгруппировано по расположению) x каждый день
+      года; в ячейке — суммарные плановые часы работ этого оборудования на дату.
+    """
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.utils import get_column_letter
+        from itertools import groupby
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Не установлен openpyxl. Запустите setup.bat")
+
+    if not year:
+        year = date.today().year
+    y0 = date(year, 1, 1)
+    y1 = date(year, 12, 31)
+    ndays = (y1 - y0).days + 1
+
+    machines = query("SELECT * FROM machines ORDER BY location, name")
+    tasks_all = query("SELECT * FROM tasks")
+    by_machine = {}
+    for t in tasks_all:
+        by_machine.setdefault(t["machine_id"], []).append(t)
+
+    # Расчёт: часы по дням, отмеченные месяцы, годовая трудоёмкость
+    day_hours = {}
+    month_marks = {}
+    year_total = {}
+    for m in machines:
+        dh = {}
+        months = set()
+        total = 0.0
+        for t in by_machine.get(m["id"], []):
+            h = t.get("planned_hours") or 0
+            for occ in _task_occurrences(t["due_date"], t["frequency_days"], year):
+                dh[occ.isoformat()] = dh.get(occ.isoformat(), 0) + h
+                months.add(occ.month)
+                total += h
+        day_hours[m["id"]] = dh
+        month_marks[m["id"]] = months
+        year_total[m["id"]] = total
+
+    MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+              "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
+    ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
+
+    head_font = Font(bold=True, color="FFFFFF")
+    head_fill = PatternFill("solid", fgColor="414042")
+    loc_font = Font(bold=True, color="2B2B2D")
+    loc_fill = PatternFill("solid", fgColor="47C2C7")
+    center = Alignment(horizontal="center", vertical="center")
+    left = Alignment(horizontal="left", vertical="center")
+    thin = Side(style="thin", color="C8D0DA")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    wb = Workbook()
+
+    # ---------------- Лист «Год» ----------------
+    ws = wb.active
+    ws.title = "Год"
+    ws.merge_cells("A1:N1")
+    ws["A1"] = f"ГРАФИК ППР оборудования на {year} год"
+    ws["A1"].font = Font(bold=True, size=14)
+    header = ["Наименование оборудования", "Расположение"] + ROMAN + ["Трудоемкость, чел*час."]
+    ws.append([])
+    ws.append(header)
+    hrow = ws.max_row
+    for c in range(1, len(header) + 1):
+        cell = ws.cell(row=hrow, column=c)
+        cell.font = head_font
+        cell.fill = head_fill
+        cell.alignment = center
+        cell.border = border
+    for m in machines:
+        row = [m["name"], m["location"]]
+        for mon in range(1, 13):
+            row.append("Х" if mon in month_marks[m["id"]] else "")
+        total = year_total[m["id"]]
+        row.append(round(total, 2) if total else "")
+        ws.append(row)
+        for c in range(1, len(header) + 1):
+            ws.cell(row=ws.max_row, column=c).border = border
+    ws.column_dimensions["A"].width = 34
+    ws.column_dimensions["B"].width = 18
+    for i in range(3, 15):
+        ws.column_dimensions[get_column_letter(i)].width = 6
+    ws.column_dimensions["N"].width = 18
+    ws.freeze_panes = f"C{hrow + 1}"
+
+    # ---------------- Лист «Год по дням» ----------------
+    ws2 = wb.create_sheet("Год по дням")
+    ws2.cell(row=1, column=1, value="Наименование оборудования")
+    cur_m = None
+    start = 2
+    for i in range(ndays):
+        cur = y0 + timedelta(days=i)
+        col = 2 + i
+        ws2.cell(row=2, column=col, value=cur.day)
+        if cur_m is None:
+            cur_m = cur.month
+            start = col
+        elif cur.month != cur_m:
+            ws2.merge_cells(start_row=1, start_column=start, end_row=1, end_column=col - 1)
+            ws2.cell(row=1, column=start, value=MONTHS[cur_m - 1])
+            cur_m = cur.month
+            start = col
+    ws2.merge_cells(start_row=1, start_column=start, end_row=1, end_column=1 + ndays)
+    ws2.cell(row=1, column=start, value=MONTHS[cur_m - 1])
+    for col in range(1, ndays + 2):
+        c1 = ws2.cell(row=1, column=col)
+        c1.alignment = center
+        c1.font = head_font
+        c1.fill = head_fill
+        c2 = ws2.cell(row=2, column=col)
+        c2.alignment = center
+        c2.font = Font(bold=True, size=9)
+
+    row = 3
+    seq = sorted(machines, key=lambda x: (x["location"] or "", x["name"]))
+    for loc, group in groupby(seq, key=lambda x: x["location"] or "— без расположения —"):
+        ws2.cell(row=row, column=1, value=loc)
+        ws2.merge_cells(start_row=row, start_column=1, end_row=row, end_column=1 + ndays)
+        lc = ws2.cell(row=row, column=1)
+        lc.font = loc_font
+        lc.fill = loc_fill
+        lc.alignment = left
+        row += 1
+        for m in group:
+            ws2.cell(row=row, column=1, value=m["name"]).alignment = left
+            dh = day_hours[m["id"]]
+            for i in range(ndays):
+                h = dh.get((y0 + timedelta(days=i)).isoformat())
+                if h:
+                    ws2.cell(row=row, column=2 + i, value=h).alignment = center
+            row += 1
+
+    ws2.column_dimensions["A"].width = 32
+    for i in range(ndays):
+        ws2.column_dimensions[get_column_letter(2 + i)].width = 3.2
+    ws2.freeze_panes = "B3"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"Годовой_план_ППР_{year}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"ppr_year_{year}.xlsx\"; "
                                    f"filename*=UTF-8''{quote(filename)}"
         },
     )
