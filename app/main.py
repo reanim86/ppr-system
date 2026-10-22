@@ -485,6 +485,10 @@ def export_year(year: int = 0, user=Depends(current_user)):
         from openpyxl import Workbook
         from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
         from openpyxl.utils import get_column_letter
+        from openpyxl.worksheet.properties import PageSetupProperties
+        from openpyxl.chart import BarChart, Reference
+        from openpyxl.chart.data_source import AxDataSource, StrRef
+        from openpyxl.chart.shapes import GraphicalProperties
         from itertools import groupby
     except ImportError:
         raise HTTPException(status_code=500, detail="Не установлен openpyxl. Запустите setup.bat")
@@ -526,10 +530,11 @@ def export_year(year: int = 0, user=Depends(current_user)):
     head_font = Font(bold=True, color="FFFFFF")
     head_fill = PatternFill("solid", fgColor="414042")
     loc_font = Font(bold=True, color="2B2B2D")
-    loc_fill = PatternFill("solid", fgColor="47C2C7")
+    loc_fill = PatternFill("solid", fgColor="E6F4F5")
     center = Alignment(horizontal="center", vertical="center")
     left = Alignment(horizontal="left", vertical="center")
-    thin = Side(style="thin", color="C8D0DA")
+    wrap_left = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    thin = Side(style="thin", color="808080")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     wb = Workbook()
@@ -537,86 +542,268 @@ def export_year(year: int = 0, user=Depends(current_user)):
     # ---------------- Лист «Год» ----------------
     ws = wb.active
     ws.title = "Год"
-    ws.merge_cells("A1:N1")
-    ws["A1"] = f"ГРАФИК ППР оборудования на {year} год"
-    ws["A1"].font = Font(bold=True, size=14)
-    header = ["Наименование оборудования", "Расположение"] + ROMAN + ["Трудоемкость, чел*час."]
-    ws.append([])
-    ws.append(header)
-    hrow = ws.max_row
-    for c in range(1, len(header) + 1):
-        cell = ws.cell(row=hrow, column=c)
-        cell.font = head_font
-        cell.fill = head_fill
-        cell.alignment = center
-        cell.border = border
-    for m in machines:
-        row = [m["name"], m["location"]]
-        for mon in range(1, 13):
-            row.append("Х" if mon in month_marks[m["id"]] else "")
-        total = year_total[m["id"]]
-        row.append(round(total, 2) if total else "")
-        ws.append(row)
-        for c in range(1, len(header) + 1):
-            ws.cell(row=ws.max_row, column=c).border = border
-    ws.column_dimensions["A"].width = 34
-    ws.column_dimensions["B"].width = 18
-    for i in range(3, 15):
-        ws.column_dimensions[get_column_letter(i)].width = 6
-    ws.column_dimensions["N"].width = 18
-    ws.freeze_panes = f"C{hrow + 1}"
+    TOTAL_COLS = 15            # A + B + 12 месяцев + Трудоемкость
+    MONTH_COL0 = 3             # первый столбец месяцев (C)
+    MONTH_COL_LAST = 14        # последний столбец месяцев (N)
+    TOTAL_COL = 15             # столбец «Трудоемкость» (O)
+
+    # Шапка (строки 2-9) — как в примере
+    ws["I2"] = "УТВЕРЖДАЮ:"
+    ws["I3"] = "Директор"
+    ws["I4"] = 'ООО "СиТри Индастри"'
+    ws["I5"] = "______________"
+    ws["L5"] = "А.С. Плешков"
+    ws["I6"] = f'"_____" ________________ {year} г.'
+    for r, txt, sz in ((7, "ГРАФИК ППР", 14),
+                       (8, 'оборудования ООО "СиТри Индастри"', 12),
+                       (9, f"на {year} г.", 12)):
+        c = ws.cell(row=r, column=2, value=txt)
+        c.font = Font(bold=True, size=sz)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+
+    # Заголовки таблицы: строка 11 — названия, 12 — месяцы, 13 — номера столбцов
+    hr = 11
+    ws.cell(row=hr, column=1, value="Наименование оборудования")
+    ws.cell(row=hr, column=2, value="Ед.изм.")
+    ws.merge_cells(start_row=hr, start_column=MONTH_COL0, end_row=hr, end_column=MONTH_COL_LAST)
+    ws.cell(row=hr, column=MONTH_COL0, value="Месяц проведения ремонта")
+    ws.merge_cells(start_row=hr, start_column=TOTAL_COL, end_row=hr + 1, end_column=TOTAL_COL)
+    ws.cell(row=hr, column=TOTAL_COL, value="Трудоемкость, чел*час.")
+    for i, rm in enumerate(ROMAN):
+        ws.cell(row=hr + 1, column=MONTH_COL0 + i, value=rm)
+    for cnum in range(1, TOTAL_COLS + 1):
+        ws.cell(row=hr + 2, column=cnum, value=cnum)
+    for rr in (hr, hr + 1, hr + 2):
+        for cc in range(1, TOTAL_COLS + 1):
+            cell = ws.cell(row=rr, column=cc)
+            cell.font = Font(bold=True)
+            cell.alignment = center
+            cell.border = border
+    ws.cell(row=hr, column=1).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    ws.cell(row=hr, column=2).alignment = left
+    ws.cell(row=hr, column=TOTAL_COL).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # Данные (сгруппированы по расположению)
+    row = hr + 3
+    seq = sorted(machines, key=lambda x: (x["location"] or "", x["name"]))
+    for loc, group in groupby(seq, key=lambda x: x["location"] or "— без расположения —"):
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=TOTAL_COLS)
+        gc = ws.cell(row=row, column=1, value=loc)
+        gc.font = loc_font
+        gc.alignment = left
+        for cc in range(1, TOTAL_COLS + 1):
+            ws.cell(row=row, column=cc).border = border
+        row += 1
+        for m in group:
+            ws.cell(row=row, column=1, value=m["name"]).alignment = wrap_left
+            ws.cell(row=row, column=2, value=m.get("power") or "")
+            for mon in range(1, 13):
+                ws.cell(row=row, column=MONTH_COL0 - 1 + mon,
+                        value="Х" if mon in month_marks[m["id"]] else "")
+            total = year_total[m["id"]]
+            ws.cell(row=row, column=TOTAL_COL, value=round(total, 2) if total else "")
+            for cc in range(1, TOTAL_COLS + 1):
+                ws.cell(row=row, column=cc).border = border
+            row += 1
+
+    # Внешняя рамка основной таблицы
+    last_row = row - 1
+    outer = Side(style="medium", color="424242")
+    for rr in range(hr, last_row + 1):
+        for cc in range(1, TOTAL_COLS + 1):
+            cell = ws.cell(row=rr, column=cc)
+            b = cell.border
+            try:
+                cell.border = Border(
+                    left=outer if cc == 1 else b.left,
+                    right=outer if cc == TOTAL_COLS else b.right,
+                    top=outer if rr == hr else b.top,
+                    bottom=outer if rr == last_row else b.bottom,
+                )
+            except Exception:
+                pass
+
+    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["B"].width = 9
+    for i in range(MONTH_COL0, MONTH_COL_LAST + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 4.3
+    ws.column_dimensions[get_column_letter(TOTAL_COL)].width = 13
+    ws.freeze_panes = f"C{hr + 3}"
+
+    # Печать: книжная ориентация, вписать в одну страницу по ширине, поля в см (→ дюймы)
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    ws.print_area = f"A1:{get_column_letter(TOTAL_COLS)}{last_row}"
+    ws.page_margins.top = 1.9 / 2.54
+    ws.page_margins.bottom = 1.9 / 2.54
+    ws.page_margins.left = 0.6 / 2.54
+    ws.page_margins.right = 0.6 / 2.54
+    ws.page_margins.header = 0.8 / 2.54
+    ws.page_margins.footer = 0.8 / 2.54
 
     # ---------------- Лист «Год по дням» ----------------
     ws2 = wb.create_sheet("Год по дням")
-    ws2.cell(row=1, column=1, value="Наименование оборудования")
-    cur_m = None
-    start = 2
+    gap_fill = PatternFill("solid", fgColor="414042")
+    day_col = {}      # iso-дата -> индекс столбца
+    gap_cols = []     # индексы разделительных столбцов между месяцами
+
+    # Разбивка дней по месяцам
+    month_days = []
     for i in range(ndays):
         cur = y0 + timedelta(days=i)
-        col = 2 + i
-        ws2.cell(row=2, column=col, value=cur.day)
-        if cur_m is None:
-            cur_m = cur.month
-            start = col
-        elif cur.month != cur_m:
-            ws2.merge_cells(start_row=1, start_column=start, end_row=1, end_column=col - 1)
-            ws2.cell(row=1, column=start, value=MONTHS[cur_m - 1])
-            cur_m = cur.month
-            start = col
-    ws2.merge_cells(start_row=1, start_column=start, end_row=1, end_column=1 + ndays)
-    ws2.cell(row=1, column=start, value=MONTHS[cur_m - 1])
-    for col in range(1, ndays + 2):
-        c1 = ws2.cell(row=1, column=col)
+        if not month_days or month_days[-1][0] != cur.month:
+            month_days.append((cur.month, []))
+        month_days[-1][1].append(cur)
+
+    ws2.cell(row=1, column=1, value="Наименование оборудования")
+    col = 2
+    for mi, (mon, days) in enumerate(month_days):
+        if mi > 0:                      # отступ между месяцами
+            gap_cols.append(col)
+            col += 1
+        start = col
+        for d in days:
+            day_col[d.isoformat()] = col
+            ws2.cell(row=2, column=col, value=d.day)
+            col += 1
+        ws2.merge_cells(start_row=1, start_column=start, end_row=1, end_column=col - 1)
+        ws2.cell(row=1, column=start, value=MONTHS[mon - 1])
+    last_col = col - 1
+
+    for c in range(1, last_col + 1):
+        c1 = ws2.cell(row=1, column=c)
         c1.alignment = center
         c1.font = head_font
         c1.fill = head_fill
-        c2 = ws2.cell(row=2, column=col)
+        c2 = ws2.cell(row=2, column=c)
         c2.alignment = center
         c2.font = Font(bold=True, size=9)
 
+    # Данные, сгруппированные по расположению; подсчёт суммы по дням
+    col_totals = {}
     row = 3
     seq = sorted(machines, key=lambda x: (x["location"] or "", x["name"]))
     for loc, group in groupby(seq, key=lambda x: x["location"] or "— без расположения —"):
-        ws2.cell(row=row, column=1, value=loc)
-        ws2.merge_cells(start_row=row, start_column=1, end_row=row, end_column=1 + ndays)
-        lc = ws2.cell(row=row, column=1)
+        for c in range(1, last_col + 1):
+            ws2.cell(row=row, column=c).fill = loc_fill
+        lc = ws2.cell(row=row, column=1, value=loc)
         lc.font = loc_font
-        lc.fill = loc_fill
         lc.alignment = left
         row += 1
         for m in group:
             ws2.cell(row=row, column=1, value=m["name"]).alignment = left
-            dh = day_hours[m["id"]]
-            for i in range(ndays):
-                h = dh.get((y0 + timedelta(days=i)).isoformat())
+            for iso, h in day_hours[m["id"]].items():
                 if h:
-                    ws2.cell(row=row, column=2 + i, value=h).alignment = center
+                    ws2.cell(row=row, column=day_col[iso], value=h).alignment = center
+                    col_totals[iso] = col_totals.get(iso, 0) + h
             row += 1
 
+    # Итоговая строка: суммарные часы по каждому дню
+    total_row = row
+    for c in range(1, last_col + 1):
+        try:
+            ws2.cell(row=total_row, column=c).fill = loc_fill
+        except Exception:
+            pass
+    tc = ws2.cell(row=total_row, column=1, value="Итого, ч")
+    tc.font = Font(bold=True)
+    tc.alignment = left
+    for iso, total in col_totals.items():
+        cell = ws2.cell(row=total_row, column=day_col[iso], value=round(total, 2))
+        cell.font = Font(bold=True)
+        cell.alignment = center
+
+    # Заливка разделительных столбцов (отступ между месяцами)
+    for gc in gap_cols:
+        for rr in range(1, total_row + 1):
+            try:
+                ws2.cell(row=rr, column=gc).fill = gap_fill
+            except Exception:
+                pass
+
     ws2.column_dimensions["A"].width = 32
-    for i in range(ndays):
-        ws2.column_dimensions[get_column_letter(2 + i)].width = 3.2
+    for iso, cc in day_col.items():
+        ws2.column_dimensions[get_column_letter(cc)].width = 3.2
+    for gc in gap_cols:
+        ws2.column_dimensions[get_column_letter(gc)].width = 2.4
     ws2.freeze_panes = "B3"
+
+    # ---------------- Лист «Диаграмма Ганта» ----------------
+    # Оборудование — по оси Y (одна строка на станок), по оси X — дни года.
+    # Каждая работа с плановым временем (> 0) — полоса в день её выполнения
+    # (длина полосы = длительность в днях, часы/24).
+    # Зум по месяцу выполняется вручную в Excel: «Формат оси → Границы».
+    equip_events = []
+    maxk = 0
+    for m in seq:
+        evs = []
+        for t in by_machine.get(m["id"], []):
+            h = t.get("planned_hours") or 0
+            if h <= 0:
+                continue
+            for occ in _task_occurrences(t["due_date"], t["frequency_days"], year):
+                evs.append((occ.timetuple().tm_yday, float(h) / 24.0))
+        evs.sort()
+        equip_events.append((m["name"], evs))
+        maxk = max(maxk, len(evs))
+
+    gdata = wb.create_sheet("Данные Ганта")
+    header = ["Оборудование"]
+    for k in range(1, maxk + 1):
+        header += [f"s{k}", f"d{k}"]
+    gdata.append(header)
+    for name, evs in equip_events:
+        rowvals = [name]
+        prev_end = 0.0
+        for k in range(maxk):
+            if k < len(evs):
+                pos, dur = evs[k]
+                rowvals += [max(0.0, pos - prev_end), dur]
+                prev_end = pos + dur
+            else:
+                rowvals += [0, 0]
+        gdata.append(rowvals)
+    gdata.sheet_state = "hidden"
+
+    gw = wb.create_sheet("Диаграмма Ганта")
+    gw["B2"] = f"Диаграмма Ганта — план ремонтов на {year} г. (по оси X — дни года; для зума: Формат оси → Границы)"
+    gw["B2"].font = Font(bold=True, size=12)
+    if maxk > 0 and equip_events:
+        chart = BarChart()
+        chart.type = "bar"           # горизонтальные полосы (Гант)
+        chart.grouping = "stacked"
+        chart.overlap = 100
+        chart.title = f"План ППР на {year} г."
+        last_col = 1 + 2 * maxk
+        data = Reference(gdata, min_col=2, max_col=last_col, min_row=1, max_row=1 + len(equip_events))
+        chart.add_data(data, titles_from_data=True)
+        # категории — строковые имена оборудования (иначе Excel не показывает названия)
+        cat_ref = f"'Данные Ганта'!$A$2:$A${1 + len(equip_events)}"
+        for s in chart.series:
+            s.cat = AxDataSource(strRef=StrRef(f=cat_ref))
+        # нечётные ряды (смещение) — прозрачные, чётные (длительность) — фирменный цвет
+        for si in range(len(chart.series)):
+            if si % 2 == 0:
+                chart.series[si].graphicalProperties = GraphicalProperties(noFill=True)
+            else:
+                chart.series[si].graphicalProperties = GraphicalProperties(solidFill="47C2C7")
+        chart.legend = None          # убрать расшифровку рядов (s1/d1/...)
+        chart.x_axis.title = "Оборудование"
+        chart.y_axis.title = "День года"
+        chart.x_axis.axPos = "l"
+        chart.y_axis.axPos = "b"
+        chart.x_axis.delete = False
+        chart.y_axis.delete = False
+        chart.y_axis.scaling.min = 1
+        chart.y_axis.scaling.max = ndays
+        chart.y_axis.majorUnit = 7
+        chart.height = max(9, len(equip_events) * 0.55)
+        chart.width = 30
+        gw.add_chart(chart, "B4")
+    else:
+        gw["B4"] = "Нет работ с заданным плановым временем за выбранный год."
 
     buf = io.BytesIO()
     wb.save(buf)
